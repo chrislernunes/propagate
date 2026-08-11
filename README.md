@@ -1,5 +1,3 @@
-# Propagate
-
 An incremental computation runtime written in OCaml. 
 The project explores how to implement this efficiently and correctly from first principles.
 
