@@ -1,8 +1,7 @@
-An incremental computation runtime written in OCaml. 
-The project explores how to implement this efficiently and correctly from first principles.
+# Propagate
 
-Propagate maintains a graph of dependent computations and recomputes only the parts affected when an input changes. 
-
+An incremental computation runtime written in OCaml 5.
+Propagate maintains a dependency graph of computations and recomputes only the parts of the graph affected by a change.
 
 ```text
         A
@@ -12,59 +11,112 @@ Propagate maintains a graph of dependent computations and recomputes only the pa
         D
 ```
 
-If `A` changes, Propagate invalidates and recomputes `B`, `C`, and `D` without unnecessarily evaluating unrelated computations.
+When `A` changes:
+
+```text
+A changes
+   │
+   ├──→ B becomes stale
+   │
+   ├──→ C becomes stale
+   │
+   └──→ D becomes stale
+          │
+          ▼
+    affected nodes
+      recompute
+```
+
+Unrelated computations are left untouched.
 
 ## Example
 
 ```ocaml
-let x = Propagate.var 10.0
+module I = Propagate.Make ()
+
+let x = I.var 10
 
 let y =
-  Propagate.map x ~f:(fun x ->
-    x *. 2.0)
+  I.map (I.watch x) ~f:(fun x ->
+    x * 2)
 
-let z =
-  Propagate.map y ~f:(fun y ->
-    y +. 100.0)
+let obs = I.observe y
 
-Propagate.stabilize ();
+I.stabilize ()
 
-Propagate.set x 20.0;
-Propagate.stabilize ();
+let v = I.value obs
+(* 20 *)
 
-Propagate.value z
+I.set x 21;
+I.stabilize ()
+
+let v = I.value obs
+(* 42 *)
 ```
 
-The runtime tracks the dependency graph automatically.
+## Core
 
-## Core Ideas
+Propagate implements:
 
-- Dependency tracking
-- Invalidation
-- Incremental recomputation
-- Memoization
-- Dependency-aware scheduling
-- Dynamic dependencies
-- Cycle detection
-- Deterministic stabilization
+* Mutable input variables
+* Dependency tracking
+* Incremental invalidation
+* Necessity propagation
+* Deterministic stabilization
+* Height-based scheduling
+* Dynamic dependencies through `bind`
+* Cycle detection
+* Exception propagation
+* Cutoff-based propagation suppression
+* Observer lifecycle management
+
+The implementation separates:
+
+```text
+Node
+  ↓
+Graph
+  ↓
+Scheduler
+  ↓
+Incremental API
+```
+
+A separate reference evaluator provides an independent full-recomputation implementation for differential testing.
 
 ## Correctness
 
-Propagate will include a simple full-recomputation reference implementation.
-The incremental runtime will be tested against it using generated graphs and update sequences.
+Correctness is treated as a first-class property rather than inferred from unit tests.
 
-```text
-Incremental result == Full recomputation result
-```
+The test suite includes:
+
+* Unit tests
+* Property-based tests with QCheck2
+* Differential testing against the reference evaluator
+* Runtime invariant checking
+* Deep and wide graph stress tests
+* Dynamic dependency tests
+* Exception and recovery tests
+* Memory/lifetime tests
+
+The runtime checks invariants including dependency height ordering, scheduler membership, necessity propagation, acyclicity, and post-stabilization consistency.
 
 ## Performance
 
-Benchmarks will compare incremental recomputation against full recomputation across different graph structures and affected-subgraph sizes.
-The goal is not to assume incremental computation is always faster, but to determine **when it actually is**.
+The benchmark suite evaluates:
 
-## Status
+* Chains
+* Wide graphs
+* Deep graphs
+* Shared DAGs
+* Sparse updates
+* Dense updates
+* Dynamic dependencies
+* Financial-shaped dependency graphs
 
-Early development.
+Incremental computation is also compared against a fair full-recomputation baseline that preserves DAG sharing.
+
+The goal is not to assume that incremental computation is always faster, but to measure where the crossover occurs as the fraction of affected nodes and computation cost change.
 
 ## License
 
