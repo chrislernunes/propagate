@@ -62,23 +62,7 @@ Incremental result == Full recomputation result
 ## Performance
 
 Benchmarks will compare incremental recomputation against full recomputation across different graph structures and affected-subgraph sizes.
-
 The goal is not to assume incremental computation is always faster, but to determine **when it actually is**.
-
-## Roadmap
-
-- [ ] Core computation graph
-- [ ] Input variables
-- [ ] Invalidation
-- [ ] Stabilization
-- [ ] Memoization
-- [ ] Dynamic dependencies
-- [ ] Cycle detection
-- [ ] Reference implementation
-- [ ] Property-based testing
-- [ ] Benchmarks
-- [ ] Profiling
-- [ ] Parallel evaluation
 
 ## Status
 
