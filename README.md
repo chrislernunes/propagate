@@ -1,10 +1,10 @@
 # Propagate
 
-A from-scratch incremental computation runtime written in OCaml.
+An incremental computation runtime written in OCaml. 
+The project explores how to implement this efficiently and correctly from first principles.
 
-## What is it?
+Propagate maintains a graph of dependent computations and recomputes only the parts affected when an input changes. 
 
-Propagate maintains a graph of dependent computations and recomputes only the parts affected when an input changes.
 
 ```text
         A
@@ -50,23 +50,9 @@ The runtime tracks the dependency graph automatically.
 - Cycle detection
 - Deterministic stabilization
 
-## Why?
-
-The same pattern appears in:
-
-- spreadsheets
-- reactive systems
-- compilers
-- build systems
-- real-time analytics
-- financial risk systems
-
-The project explores how to implement this efficiently and correctly from first principles in OCaml.
-
 ## Correctness
 
 Propagate will include a simple full-recomputation reference implementation.
-
 The incremental runtime will be tested against it using generated graphs and update sequences.
 
 ```text
