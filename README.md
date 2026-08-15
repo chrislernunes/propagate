@@ -1,7 +1,10 @@
 # Propagate
 
-An incremental computation runtime written in OCaml 5.
-Propagate maintains a dependency graph of computations and recomputes only the parts of the graph affected by a change.
+An incremental computation runtime in OCaml.
+
+Represent a computation as a dependency graph. When an input changes,
+only the parts of the graph that are actually affected — and that
+someone is actually watching — get recomputed.
 
 ```text
         A
@@ -11,113 +14,154 @@ Propagate maintains a dependency graph of computations and recomputes only the p
         D
 ```
 
-When `A` changes:
+Each node depends on the nodes above it. When `A` changes:
 
 ```text
 A changes
-   │
-   ├──→ B becomes stale
-   │
-   ├──→ C becomes stale
-   │
-   └──→ D becomes stale
-          │
-          ▼
-    affected nodes
-      recompute
+   |
+   v
+B and C become stale (marked, not yet recomputed)
+   |
+   v
+when stabilize() runs, B and C are recomputed
+   |
+   v
+D becomes stale only once B or C's *value* actually changes,
+   and is recomputed in turn
+   |
+   v
+anything unrelated to A is never touched
 ```
 
-Unrelated computations are left untouched.
+Invalidation and recomputation are different things, on purpose: `set`
+just marks the affected region stale; nothing is recomputed until
+`stabilize()` runs, and even then a node whose recomputed value turns out
+to equal its old one (see "Cutoff" below) doesn't propagate the
+invalidation any further.
 
-## Example
+## Minimal example
 
 ```ocaml
-module I = Propagate.Make ()
+let g = Incremental.create () in
+let x = Incremental.var g 10 in
+let y = Incremental.map g (Incremental.watch x) ~f:(fun v -> v * 2) in
+let obs = Incremental.observe g y in
+Incremental.stabilize g;
+Incremental.value obs (* 20 *)
 
-let x = I.var 10
-
-let y =
-  I.map (I.watch x) ~f:(fun x ->
-    x * 2)
-
-let obs = I.observe y
-
-I.stabilize ()
-
-let v = I.value obs
-(* 20 *)
-
-I.set x 21;
-I.stabilize ()
-
-let v = I.value obs
-(* 42 *)
+Incremental.set x 21;
+Incremental.stabilize g;
+Incremental.value obs (* 42 *)
 ```
 
-## Core
+`bind` adds dependencies that change shape at runtime:
 
-Propagate implements:
-
-* Mutable input variables
-* Dependency tracking
-* Incremental invalidation
-* Necessity propagation
-* Deterministic stabilization
-* Height-based scheduling
-* Dynamic dependencies through `bind`
-* Cycle detection
-* Exception propagation
-* Cutoff-based propagation suppression
-* Observer lifecycle management
-
-The implementation separates:
-
-```text
-Node
-  ↓
-Graph
-  ↓
-Scheduler
-  ↓
-Incremental API
+```ocaml
+let selector = Incremental.var g 0 in
+let branches = Array.init 5 (fun i -> Incremental.var g (i * 10)) in
+let dyn =
+  Incremental.bind g (Incremental.watch selector) ~f:(fun i ->
+      Incremental.watch branches.(i))
+in
+(* dyn now tracks branches.(0). Change the selector, and it starts
+   tracking a different node entirely -- the dependency graph itself
+   changes shape, not just the values flowing through it. *)
 ```
 
-A separate reference evaluator provides an independent full-recomputation implementation for differential testing.
+More in `examples/basic.ml`.
 
-## Correctness
+## Core concepts
 
-Correctness is treated as a first-class property rather than inferred from unit tests.
+- **`var` / `watch`** -- a mutable input cell, and the read-only handle
+  used to depend on it.
+- **`map` / `map2`** -- derive a new computation from one or two others.
+- **`bind`** -- derive a computation whose *dependency structure itself*
+  depends on a value, re-evaluated dynamically.
+- **`cutoff`** -- suppress propagation when a recomputed value is
+  equivalent to the old one under a caller-supplied equality (every node
+  already does this with physical equality by default -- see
+  `docs/semantics.md`).
+- **`observe` / `disable`** -- mark a computation as actually needed (only
+  necessary, observed computations get scheduled) and stop watching it.
+- **`stabilize`** -- recompute everything stale and necessary, in an order
+  that never reads a stale dependency.
 
-The test suite includes:
+Full semantics, including exactly when `bind` re-runs its function versus
+just relays a value, how exceptions propagate, and why the default
+cutoff is physical equality rather than structural equality: see
+`docs/semantics.md`.
 
-* Unit tests
-* Property-based tests with QCheck2
-* Differential testing against the reference evaluator
-* Runtime invariant checking
-* Deep and wide graph stress tests
-* Dynamic dependency tests
-* Exception and recovery tests
-* Memory/lifetime tests
+## Testing
 
-The runtime checks invariants including dependency height ordering, scheduler membership, necessity propagation, acyclicity, and post-stabilization consistency.
+```
+dune test
+```
 
-## Performance
+runs the unit (`test/unit`), invariant (`test/invariant`), and
+differential (`test/differential`) suites (fast -- well under a second
+combined). Property tests (`test/property`, ~3,500 QCheck2-generated
+cases across two suites) and stress tests (`test/stress`, up to
+1,000,000-node graphs) are excluded from the default `dune test` run
+because of their runtime, and are run explicitly:
 
-The benchmark suite evaluates:
+```
+dune exec test/property/test_property.exe
+dune exec test/stress/test_stress.exe
+```
 
-* Chains
-* Wide graphs
-* Deep graphs
-* Shared DAGs
-* Sparse updates
-* Dense updates
-* Dynamic dependencies
-* Financial-shaped dependency graphs
+Differential testing compares this engine against `lib/reference.ml`, a
+structurally independent full-recomputation evaluator that shares no
+code, cache, or scheduler with the real implementation, after every
+`stabilize()` in both the differential and property suites. Property
+testing (QCheck2, with shrinking) generates random sequences of graph
+operations -- including dynamic `bind` switching -- and checks both
+differential agreement and a set of mechanically-checked graph invariants
+(dependency height ordering, necessity-count consistency, acyclicity,
+dependents-list reciprocity) after every mutating operation. It's how
+the bind/dependents-list bug in `docs/design.md` was actually found:
+QCheck2 generated the exact adversarial shape (a bind whose dynamic pool
+includes its own input) and shrank a much longer failing sequence down to
+a minimal repro in seconds.
 
-Incremental computation is also compared against a fair full-recomputation baseline that preserves DAG sharing.
+## Benchmarks
 
-The goal is not to assume that incremental computation is always faster, but to measure where the crossover occurs as the fraction of affected nodes and computation cost change.
+```
+dune exec benchmark/chains.exe
+dune exec benchmark/wide.exe
+dune exec benchmark/deep.exe
+dune exec benchmark/shared.exe
+dune exec benchmark/sparse.exe
+dune exec benchmark/dense.exe
+dune exec benchmark/dynamic.exe
+dune exec benchmark/financial.exe
+dune exec benchmark/crossover.exe
+```
+
+Results, methodology, and an honest accounting of where full
+recomputation wins instead: `docs/benchmarks.md`.
+
+## Status
+
+Correct and reasonably fast for the shapes benchmarked in
+`docs/benchmarks.md`, with one measured, narrow performance limitation
+around very long chains of newly-constructed `bind` nodes (see
+`docs/design.md`, "Known limitations") and no OCaml 5/Domains
+parallelism (attempted, didn't complete in this build environment -- see
+the same document). Not published as an opam package or used outside
+this repository.
+
+## Documentation
+
+- `docs/design.md` -- accepted design, and every deviation from the
+  original Stage 0 RFC, with the reasoning (bugs found, how, and why
+  each fix is correct)
+- `docs/architecture.md` -- module structure and data flow
+- `docs/semantics.md` -- the state model, invalidation, `bind`, `cutoff`,
+  exceptions, cycles, reentrancy
+- `docs/complexity.md` -- cost of every operation, including two
+  performance pathologies found by benchmarking and one that was fixed
+- `docs/benchmarks.md` -- full results and methodology
 
 ## License
 
-MIT
+MIT -- see `LICENSE`.
