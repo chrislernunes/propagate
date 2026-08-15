@@ -1,0 +1,5 @@
+(executables
+ (names chains wide deep shared sparse dense dynamic financial crossover)
+ (libraries propagate bench_util)
+ (flags
+  (:standard -w +a-4-9-40-41-42-44-45-70 -warn-error -a)))

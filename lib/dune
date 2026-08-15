@@ -1,0 +1,5 @@
+(library
+ (name propagate)
+ (private_modules node graph scheduler stats invariant)
+ (flags
+  (:standard -w +a-4-9-40-41-42-44-45-70 -warn-error -a)))

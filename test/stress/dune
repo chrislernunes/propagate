@@ -1,0 +1,5 @@
+(test
+ (name test_stress)
+ (libraries propagate unix alcotest)
+ (flags
+  (:standard -w +a-4-9-40-41-42-44-45-70 -warn-error -a)))
