@@ -3,8 +3,8 @@
 An incremental computation runtime in OCaml.
 
 Represent a computation as a dependency graph. When an input changes,
-only the parts of the graph that are actually affected — and that
-someone is actually watching — get recomputed.
+only the parts of the graph that are actually affected, and that
+someone is actually watching get recomputed.
 
 ```text
         A
