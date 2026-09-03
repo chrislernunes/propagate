@@ -137,31 +137,3 @@ dune exec benchmark/financial.exe
 dune exec benchmark/crossover.exe
 ```
 
-Results, methodology, and an honest accounting of where full
-recomputation wins instead: `docs/benchmarks.md`.
-
-## Status
-
-Correct and reasonably fast for the shapes benchmarked in
-`docs/benchmarks.md`, with one measured, narrow performance limitation
-around very long chains of newly-constructed `bind` nodes (see
-`docs/design.md`, "Known limitations") and no OCaml 5/Domains
-parallelism (attempted, didn't complete in this build environment -- see
-the same document). Not published as an opam package or used outside
-this repository.
-
-## Documentation
-
-- `docs/design.md` -- accepted design, and every deviation from the
-  original Stage 0 RFC, with the reasoning (bugs found, how, and why
-  each fix is correct)
-- `docs/architecture.md` -- module structure and data flow
-- `docs/semantics.md` -- the state model, invalidation, `bind`, `cutoff`,
-  exceptions, cycles, reentrancy
-- `docs/complexity.md` -- cost of every operation, including two
-  performance pathologies found by benchmarking and one that was fixed
-- `docs/benchmarks.md` -- full results and methodology
-
-## License
-
-MIT -- see `LICENSE`.
